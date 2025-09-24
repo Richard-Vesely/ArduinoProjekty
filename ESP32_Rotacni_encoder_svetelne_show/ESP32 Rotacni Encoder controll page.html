@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <title>ESP32 LED Controller (Web Serial)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; max-width: 720px; }
+    h1 { margin-top: 0; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+    button { padding: 8px 12px; border-radius: 8px; border: 1px solid #ccc; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input[type=range] { width: 240px; }
+    #log { white-space: pre-wrap; height: 220px; overflow: auto; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 10px; }
+    .mode-btn { min-width: 70px; }
+    .ok { color: #0a7; }
+    .ev { color: #06c; }
+    .err { color: #c00; }
+  </style>
+</head>
+<body>
+  <h1>ESP32 LED Controller</h1>
+
+  <div class="card">
+    <div class="row">
+      <button id="btnConnect">Connect</button>
+      <span id="status">Disconnected</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Mód</h3>
+    <div class="row">
+      <button class="mode-btn" data-mode="0">Rainbow</button>
+      <button class="mode-btn" data-mode="1">Theater</button>
+      <button class="mode-btn" data-mode="2">Bounce</button>
+      <button class="mode-btn" data-mode="3">Sparkle</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Jas</h3>
+    <div class="row">
+      <input id="rangeBri" type="range" min="0" max="255" value="40" />
+      <span id="briVal">40</span>
+      <button id="btnSendBri">Send</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Události & odpovědi</h3>
+    <div id="log"></div>
+  </div>
+
+<script>
+(() => {
+  const btnConnect = document.getElementById('btnConnect');
+  const statusEl   = document.getElementById('status');
+  const logEl      = document.getElementById('log');
+  const rangeBri   = document.getElementById('rangeBri');
+  const briVal     = document.getElementById('briVal');
+  const btnSendBri = document.getElementById('btnSendBri');
+  const modeBtns   = [...document.querySelectorAll('.mode-btn')];
+
+  let port = null;
+  let reader = null;
+  let writer = null;
+  let connected = false;
+
+  function setUI(en) {
+    modeBtns.forEach(b => b.disabled = !en);
+    rangeBri.disabled = !en;
+    btnSendBri.disabled = !en;
+  }
+  setUI(false);
+
+  function log(line, cls='') {
+    const span = document.createElement('div');
+    if (cls) span.className = cls;
+    span.textContent = line;
+    logEl.appendChild(span);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  async function connect() {
+    try {
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
+
+      const textEncoder = new TextEncoder();
+      const textDecoder = new TextDecoder();
+      writer = port.writable.getWriter();
+      reader = port.readable
+        .pipeThrough(new TextDecoderStream())
+        .pipeThrough(new TransformStream(new LineBreakTransformer()))
+        .getReader();
+
+      connected = true;
+      statusEl.textContent = 'Connected';
+      setUI(true);
+      log('Connected', 'ok');
+
+      readLoop().catch(err => {
+        log(`Read error: ${err.message}`, 'err');
+      });
+    } catch (err) {
+      log(`Connect error: ${err.message}`, 'err');
+    }
+  }
+
+  async function readLoop() {
+    while (connected && reader) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      // Value = full line (bez \n)
+      if (value.startsWith('OK')) log(value, 'ok');
+      else if (value.startsWith('EV')) log(value, 'ev');
+      else log(value);
+    }
+  }
+
+  async function sendLine(s) {
+    if (!writer) return;
+    const data = new TextEncoder().encode(s + '\n');
+    await writer.write(data);
+  }
+
+  btnConnect.addEventListener('click', () => {
+    if (!('serial' in navigator)) {
+      alert('Váš prohlížeč nepodporuje Web Serial. Použijte Chrome/Edge na desktopu.');
+      return;
+    }
+    if (!connected) connect();
+  });
+
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const m = btn.dataset.mode;
+      await sendLine(`MODE ${m}`);
+    });
+  });
+
+  rangeBri.addEventListener('input', () => {
+    briVal.textContent = rangeBri.value;
+  });
+
+  btnSendBri.addEventListener('click', async () => {
+    await sendLine(`BRI ${rangeBri.value}`);
+  });
+
+  // Helper transformer – rozsekat stream na řádky
+  class LineBreakTransformer {
+    constructor() { this.chunks = ''; }
+    transform(chunk, controller) {
+      this.chunks += chunk;
+      const lines = this.chunks.split(/\r?\n/);
+      this.chunks = lines.pop();
+      for (const line of lines) controller.enqueue(line);
+    }
+    flush(controller) {
+      if (this.chunks) controller.enqueue(this.chunks);
+    }
+  }
+})();
+</script>
+</body>
+</html>
