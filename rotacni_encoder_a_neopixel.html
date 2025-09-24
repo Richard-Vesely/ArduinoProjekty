@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8"/>
+<title>NeoPixel Controller (Arduino → Stránka → Arduino)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  html,body{font-family:system-ui,Segoe UI,Arial,sans-serif;background:#0b0d10;color:#e6e6e6}
+  .wrap{max-width:640px;margin:48px auto;padding:24px;background:#13161a;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  h1{margin:0 0 12px;font-size:20px}
+  button{padding:10px 14px;border-radius:10px;border:1px solid #2a323c;background:#1a2028;color:#e6e6e6;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;gap:12px;align-items:center;margin-top:10px}
+  ul{list-style:none;margin:12px 0 0;padding:0}
+  li{padding:12px 14px;margin:8px 0;border:1px solid #232a32;border-radius:12px;background:#191e24;display:flex;justify-content:space-between;align-items:center}
+  li.selected{outline:2px solid #ffcc00;background:#1d232a}
+  .status{font-size:13px;color:#9aa3ad;margin-top:8px;white-space:pre-wrap}
+  .hint{font-size:13px;color:#9aa3ad;margin-top:4px}
+  input[type=range]{width:240px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>NeoPixel Controller</h1>
+  <div class="row">
+    <button id="btnConnect">Připojit</button>
+    <label>Jas: <input id="rngBri" type="range" min="0" max="255" value="40" disabled></label>
+  </div>
+  <p class="hint">Stránka čte události z Arduina (EV UP/DOWN/PRESS) a posílá mu MODE/BRI zpět. Otevři v Chrome/Edge.</p>
+  <ul id="menu"></ul>
+  <div class="status" id="status">Nepřipojeno.</div>
+</div>
+
+<script>
+const items = [
+  { id:0, title:'0) Rainbow roll' },
+  { id:1, title:'1) Theater chase' },
+  { id:2, title:'2) Bounce' },
+  { id:3, title:'3) Sparkle' }
+];
+
+const menu = document.getElementById('menu');
+const btnConnect = document.getElementById('btnConnect');
+const rngBri = document.getElementById('rngBri');
+const statusEl = document.getElementById('status');
+
+let index = 0;
+let port=null, reader=null, writer=null;
+const te = new TextEncoder(), td = new TextDecoder();
+
+function render(){
+  menu.innerHTML='';
+  items.forEach((it,i)=>{
+    const li=document.createElement('li');
+    li.textContent = it.title;
+    if(i===index) li.classList.add('selected');
+    menu.appendChild(li);
+  });
+}
+render();
+
+function setStatus(s){ statusEl.textContent=s; }
+
+async function sendLine(s){
+  if(!writer) return;
+  await writer.write(te.encode(s+'\n'));
+}
+
+function clamp(v,min,max){ return Math.max(min, Math.min(max,v)); }
+
+async function connect(){
+  try{
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate:115200 });
+    writer = port.writable.getWriter();
+    reader = port.readable.getReader();
+    rngBri.disabled = false;
+    setStatus('Připojeno, čekám na data…');
+
+    // čtecí smyčka
+    (async ()=>{
+      let buf='';
+      try{
+        while(true){
+          const {value, done} = await reader.read();
+          if(done) break;
+          if(value){
+            buf += td.decode(value);
+            let lines = buf.split(/\r?\n/);
+            buf = lines.pop();
+            for(const ln of lines){
+              const line = ln.trim();
+              if(!line) continue;
+              // zpracuj "READY", "OK ...", "EV ..."
+              if(line.startsWith('EV ')){
+                if(line==='EV DOWN'){ index = clamp(index+1, 0, items.length-1); render(); }
+                else if(line==='EV UP'){ index = clamp(index-1, 0, items.length-1); render(); }
+                else if(line==='EV PRESS'){ sendLine('MODE '+items[index].id); }
+              }else{
+                setStatus((statusEl.textContent+'\n'+line).trim());
+              }
+            }
+          }
+        }
+      }catch(e){
+        setStatus('Čtení ukončeno.');
+      }
+    })();
+
+  }catch(e){
+    setStatus('Chyba: '+e.message);
+  }
+}
+
+btnConnect.addEventListener('click', connect);
+rngBri.addEventListener('input', ()=> sendLine('BRI '+rngBri.value));
+
+// Volitelně umožni i šipky/Enter z klávesnice
+window.addEventListener('keydown', (e)=>{
+  if(!writer) return;
+  if(e.key==='ArrowDown'){ index = clamp(index+1,0,items.length-1); render(); e.preventDefault(); }
+  else if(e.key==='ArrowUp'){ index = clamp(index-1,0,items.length-1); render(); e.preventDefault(); }
+  else if(e.key==='Enter'){ sendLine('MODE '+items[index].id); e.preventDefault(); }
+});
+</script>
+</body>
+</html>
