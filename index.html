@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Arduino Projects Browser</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Minimal styling -->
+  <style>
+    :root {
+      --bg:#0b0e14; --panel:#11141b; --ink:#e6e6e6; --muted:#a9b0bc; --accent:#ffd24a; --btn:#1a2030; --btn2:#20283b;
+      --radius:16px;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--ink); }
+    header { position:sticky; top:0; z-index:5; backdrop-filter:saturate(1.2) blur(8px); background:rgba(11,14,20,.85); border-bottom:1px solid #1e2432; }
+    header .wrap { max-width:1100px; margin:0 auto; padding:14px 18px; display:flex; gap:12px; align-items:center; }
+    h1 { margin:0; font-size:18px; letter-spacing:.3px; }
+    #path { color:var(--muted); font-size:13px; }
+    main { max-width:1100px; margin:0 auto; padding:20px 18px 80px; }
+    .toolbar { display:flex; gap:10px; align-items:center; margin:10px 0 20px; flex-wrap:wrap;}
+    button, .chip {
+      background:var(--btn); color:var(--ink); border:1px solid #273147; padding:10px 14px; border-radius:999px; cursor:pointer;
+    }
+    button:hover { background:var(--btn2); }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap:12px; }
+    .card {
+      background:var(--panel); border:1px solid #1e2432; border-radius: var(--radius);
+      padding:16px; display:flex; gap:10px; align-items:flex-start; justify-content:space-between;
+    }
+    .card .title { font-weight:600; word-break:break-word; overflow-wrap:anywhere; }
+    .type { font-size:12px; color:var(--muted); }
+    .actions { display:flex; gap:8px; }
+    .linklike { color:var(--accent); text-decoration:none; }
+    .section { margin:18px 0; }
+    .section h2 { margin:0 0 10px; font-size:16px; color:var(--muted); font-weight:600; letter-spacing:.3px; }
+    .section .grid { margin-top:8px; }
+    .title-ellipsis { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+    .viewer {
+      margin-top:18px; background:var(--panel); border:1px solid #1e2432; border-radius: var(--radius);
+      overflow:hidden;
+    }
+    .viewer-header {
+      display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid #1e2432;
+    }
+    .viewer-body { overflow:auto; }
+    pre { margin:0; padding:18px; overflow:auto; min-height:240px; }
+    .muted { color:var(--muted); }
+    .notice { background:#13213a; border:1px solid #1d2b4a; padding:10px 12px; border-radius:12px; color:#cfe1ff; }
+    .hidden { display:none; }
+  </style>
+
+  <!-- Prism.js for code highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism-tomorrow.css">
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/prism.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-clike.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-c.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-cpp.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-arduino.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-javascript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-markdown.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>Arduino Projects</h1>
+    <div id="path" class="muted"></div>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <button id="btnUp" title="Up one level">⬆️ Up</button>
+    <span class="muted" id="branchInfo"></span>
+    <span class="muted">·</span>
+    <a id="repoLink" class="linklike" target="_blank" rel="noopener">View repo</a>
+  </div>
+
+  <div id="list"></div>
+
+  <div id="viewer" class="viewer hidden">
+    <div class="viewer-header">
+      <div id="viewerTitle" class="muted"></div>
+      <div class="actions">
+        <button id="copyBtn">Copy</button>
+        <a id="rawBtn" class="chip" target="_blank" rel="noopener">Raw</a>
+        <button id="closeBtn">Close</button>
+      </div>
+    </div>
+    <div class="viewer-body">
+      <pre><code id="code" class="language-clike"></code></pre>
+    </div>
+  </div>
+
+  <p class="notice" id="limitNote" style="display:none;">
+    Heads-up: Unauthenticated GitHub API has a small hourly limit. If listing stops working for a while, that’s probably it.
+  </p>
+</main>
+
+<script>
+/* ===================== CONFIG ===================== */
+const CONFIG = {
+  owner: "Richard-Vesely",     // <- your GitHub username/org
+  repo:  "ArduinoProjekty",    // <- your repository name
+  branch: "main",              // <- branch to read from (e.g., 'main' or 'master')
+  rootPath: ""                 // <- optional subfolder inside the repo to start from (e.g., "projects")
+};
+/* ================================================== */
+
+const API_BASE = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents`;
+const RAW_BASE = `https://raw.githubusercontent.com/${CONFIG.owner}/${CONFIG.repo}/${CONFIG.branch}`;
+
+const listEl   = document.getElementById("list");
+const pathEl   = document.getElementById("path");
+const branchInfo = document.getElementById("branchInfo");
+const repoLink = document.getElementById("repoLink");
+const btnUp    = document.getElementById("btnUp");
+
+const viewer   = document.getElementById("viewer");
+const viewerTitle = document.getElementById("viewerTitle");
+const codeEl   = document.getElementById("code");
+const copyBtn  = document.getElementById("copyBtn");
+const closeBtn = document.getElementById("closeBtn");
+const rawBtn   = document.getElementById("rawBtn");
+const limitNote = document.getElementById("limitNote");
+
+// File extensions -> Prism language class
+const extToLang = new Map([
+  ["ino","arduino"],
+  ["cpp","cpp"], ["hpp","cpp"], ["c","c"], ["h","c"],
+  ["py","python"], ["js","javascript"], ["json","json"],
+  ["md","markdown"], ["txt","clike"]
+]);
+
+function getHashPath() {
+  const h = decodeURIComponent(location.hash.replace(/^#/, ""));
+  if (h) return h;
+  return CONFIG.rootPath;
+}
+function setHashPath(p) {
+  location.hash = encodeURIComponent(p || "");
+}
+function joinPath(a,b){ return [a,b].filter(Boolean).join("/"); }
+function parentPath(p) {
+  if (!p) return "";
+  const parts = p.split("/").filter(Boolean);
+  parts.pop();
+  return parts.join("/");
+}
+function leaf(name){ return name.split("/").filter(Boolean).pop(); }
+
+async function fetchJson(url){
+  const res = await fetch(url, { headers: { "Accept":"application/vnd.github+json" }});
+  if (res.status === 403) limitNote.style.display = "";
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+async function listPath(path=""){
+  listEl.innerHTML = "";
+  viewer.classList.add("hidden");
+  const url = `${API_BASE}/${path ? encodeURIComponent(path) : ""}?ref=${encodeURIComponent(CONFIG.branch)}`;
+  try{
+    const data = await fetchJson(url);
+    // Sort: dirs first, then files by name
+    data.sort((a,b) => (a.type === b.type) ? a.name.localeCompare(b.name) : (a.type === "dir" ? -1 : 1));
+
+    if (!data.length) {
+      listEl.innerHTML = `<div class="card"><div><div class="title">Empty folder</div><div class="type muted">No files here.</div></div></div>`;
+      return;
+    }
+
+    // Helper to create a card for an item
+    function createCard(item){
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const left = document.createElement("div");
+      left.style.flex = "1";
+
+      const title = document.createElement("div");
+      title.className = "title title-ellipsis";
+      title.textContent = item.name;
+      title.title = item.name;
+      left.appendChild(title);
+
+      const meta = document.createElement("div");
+      meta.className = "type";
+      meta.textContent = item.type === "dir" ? "Folder" : (item.size != null ? `File · ${item.size} B` : "File");
+      left.appendChild(meta);
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+
+      if (item.type === "dir"){
+        const openBtn = document.createElement("button");
+        openBtn.textContent = "Open";
+        openBtn.onclick = () => setHashPath(joinPath(path, item.name));
+        actions.appendChild(openBtn);
+      } else {
+        const viewBtn = document.createElement("button");
+        viewBtn.textContent = "View";
+        viewBtn.onclick = () => openFile(joinPath(path, item.name));
+        actions.appendChild(viewBtn);
+
+        const rawA = document.createElement("a");
+        rawA.className = "chip";
+        rawA.textContent = "Raw";
+        rawA.href = `${RAW_BASE}/${encodeURIComponent(joinPath(path, item.name))}`;
+        rawA.target = "_blank";
+        rawA.rel = "noopener";
+        actions.appendChild(rawA);
+      }
+
+      card.appendChild(left);
+      card.appendChild(actions);
+      return card;
+    }
+
+    // Determine if we are at root to apply Arduino/ESP grouping
+    const isRoot = !path;
+    if (isRoot) {
+      const groups = { arduino: [], esp: [], other: [] };
+      data.forEach(item => {
+        const nameUpper = item.name.toUpperCase();
+        if (nameUpper.startsWith("ESP")) groups.esp.push(item);
+        else if (nameUpper.startsWith("ES32") || nameUpper.startsWith("ES_")) groups.esp.push(item);
+        else if (nameUpper.includes("ESP32")) groups.esp.push(item);
+        else if (nameUpper.startsWith("ARDUINO")) groups.arduino.push(item);
+        else if (nameUpper.includes("NEOPIXEL") || nameUpper.includes("LCD") || nameUpper.includes("ENCODER")) groups.arduino.push(item);
+        else groups.other.push(item);
+      });
+
+      function renderSection(titleText, items){
+        if (!items.length) return;
+        const section = document.createElement("section");
+        section.className = "section";
+        const h2 = document.createElement("h2");
+        h2.textContent = titleText;
+        section.appendChild(h2);
+        const grid = document.createElement("div");
+        grid.className = "grid";
+        items.forEach(it => grid.appendChild(createCard(it)));
+        section.appendChild(grid);
+        listEl.appendChild(section);
+      }
+
+      renderSection("ESP Projects", groups.esp);
+      renderSection("Arduino Projects", groups.arduino);
+      renderSection("Other", groups.other);
+    } else {
+      // Default list view (no grouping) for subfolders
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      data.forEach(item => grid.appendChild(createCard(item)));
+      listEl.appendChild(grid);
+    }
+  } catch(err){
+    listEl.innerHTML = `<div class="card"><div><div class="title">Error</div><div class="type muted">${err.message}</div></div></div>`;
+  }
+}
+
+async function openFile(path){
+  // pick language by extension
+  const ext = (path.split(".").pop() || "").toLowerCase();
+  const lang = extToLang.get(ext) || "clike";
+  codeEl.className = `language-${lang}`;
+  viewerTitle.textContent = path;
+  viewerTitle.title = path;
+  rawBtn.href = `${RAW_BASE}/${encodeURIComponent(path)}`;
+
+  // You can fetch via contents API (base64) or raw. Raw is simpler for text.
+  try{
+    const res = await fetch(`${RAW_BASE}/${encodeURIComponent(path)}`);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const text = await res.text();
+    codeEl.textContent = text;
+    Prism.highlightElement(codeEl);
+    viewer.classList.remove("hidden");
+    // scroll viewer into view
+    viewer.scrollIntoView({ behavior:"smooth", block:"start" });
+  } catch(err){
+    codeEl.textContent = `Failed to load file: ${err.message}`;
+    viewer.classList.remove("hidden");
+  }
+}
+
+function renderBread(path){
+  pathEl.textContent = "/" + (path || "");
+}
+
+function refresh(){
+  const p = getHashPath();
+  renderBread(p);
+  branchInfo.textContent = `branch: ${CONFIG.branch}`;
+  repoLink.href = `https://github.com/${CONFIG.owner}/${CONFIG.repo}`;
+  listPath(p);
+  btnUp.disabled = !p;
+}
+
+btnUp.addEventListener("click", () => {
+  const p = getHashPath();
+  setHashPath(parentPath(p));
+});
+copyBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(codeEl.textContent);
+    copyBtn.textContent = "Copied";
+    setTimeout(()=> copyBtn.textContent = "Copy", 1200);
+  } catch(e){
+    copyBtn.textContent = "Copy failed";
+    setTimeout(()=> copyBtn.textContent = "Copy", 1200);
+  }
+});
+closeBtn.addEventListener("click", () => viewer.classList.add("hidden"));
+window.addEventListener("hashchange", refresh);
+
+// Init
+refresh();
+</script>
+</body>
+</html>
