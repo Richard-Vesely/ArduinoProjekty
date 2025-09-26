@@ -144,6 +144,10 @@ function setHashPath(p) {
   location.hash = encodeURIComponent(p || "");
 }
 function joinPath(a,b){ return [a,b].filter(Boolean).join("/"); }
+function encodePath(p){
+  if (!p) return "";
+  return p.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+}
 function parentPath(p) {
   if (!p) return "";
   const parts = p.split("/").filter(Boolean);
@@ -162,7 +166,7 @@ async function fetchJson(url){
 async function listPath(path=""){
   listEl.innerHTML = "";
   viewer.classList.add("hidden");
-  const url = `${API_BASE}/${path ? encodeURIComponent(path) : ""}?ref=${encodeURIComponent(CONFIG.branch)}`;
+  const url = `${API_BASE}${path ? "/" + encodePath(path) : ""}?ref=${encodeURIComponent(CONFIG.branch)}`;
   try{
     const data = await fetchJson(url);
     // Sort: dirs first, then files by name
@@ -209,7 +213,8 @@ async function listPath(path=""){
         const rawA = document.createElement("a");
         rawA.className = "chip";
         rawA.textContent = "Raw";
-        rawA.href = `${RAW_BASE}/${encodeURIComponent(joinPath(path, item.name))}`;
+        rawA.href = `${RAW_BASE}/${encodePath(joinPath(path, item.name))}`;
+        rawA.href = `${RAW_BASE}/${encodePath(joinPath(path, item.name))}`;
         rawA.target = "_blank";
         rawA.rel = "noopener";
         actions.appendChild(rawA);
@@ -270,11 +275,11 @@ async function openFile(path){
   codeEl.className = `language-${lang}`;
   viewerTitle.textContent = path;
   viewerTitle.title = path;
-  rawBtn.href = `${RAW_BASE}/${encodeURIComponent(path)}`;
+  rawBtn.href = `${RAW_BASE}/${encodePath(path)}`;
 
   // You can fetch via contents API (base64) or raw. Raw is simpler for text.
   try{
-    const res = await fetch(`${RAW_BASE}/${encodeURIComponent(path)}`);
+    const res = await fetch(`${RAW_BASE}/${encodePath(path)}`);
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const text = await res.text();
     codeEl.textContent = text;
