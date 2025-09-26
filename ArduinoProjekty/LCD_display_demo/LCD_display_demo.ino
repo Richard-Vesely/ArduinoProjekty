@@ -41,5 +41,5 @@ void setup() {
 
 void loop() {
   lcd.scrollDisplayLeft(); // posun textu
-  delay(400);
+  delay(800);
 }
