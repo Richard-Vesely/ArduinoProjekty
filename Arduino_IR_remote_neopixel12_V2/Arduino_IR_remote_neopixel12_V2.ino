@@ -31,9 +31,26 @@ OVLÁDÁNÍ IR OVLADAČEM
 
 #include <Adafruit_NeoPixel.h>
 #include <IRremote.hpp>   // IRremote v3+
-#include <MyIRcodes.h>    // tvoje header-only knihovna s namespace MyIR
-
-using namespace MyIR;     // zpřístupní ONE, TWO, ..., LEFTBTN, RIGHTBTN, UPBTN, DOWNBTN
+#if !defined(ONE)
+// IR button codes (formerly from MyIRcodes.h)
+constexpr uint32_t ONE      = 0xBA45FF00;
+constexpr uint32_t TWO      = 0xB946FF00;
+constexpr uint32_t THREE    = 0xB847FF00;
+constexpr uint32_t FOUR     = 0xBB44FF00;
+constexpr uint32_t FIVE     = 0xBF40FF00;
+constexpr uint32_t SIX      = 0xBC43FF00;
+constexpr uint32_t SEVEN    = 0xF807FF00;
+constexpr uint32_t EIGHT    = 0xEA15FF00;
+constexpr uint32_t NINE     = 0xF609FF00;
+constexpr uint32_t STARBTN  = 0xE916FF00;
+constexpr uint32_t ZERO     = 0xE619FF00;
+constexpr uint32_t HASHBTN  = 0xF20DFF00;
+constexpr uint32_t UPBTN    = 0xE718FF00;
+constexpr uint32_t LEFTBTN  = 0xF708FF00;
+constexpr uint32_t OKBTN    = 0xE31CFF00;
+constexpr uint32_t RIGHTBTN = 0xA55AFF00;
+constexpr uint32_t DOWNBTN  = 0xAD52FF00;
+#endif
 
 // =================== UPRAV PODLE POTŘEBY ===================
 #define LED_PIN         6

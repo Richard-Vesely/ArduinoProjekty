@@ -1,77 +1,204 @@
 <!doctype html>
-<html lang="cs">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>ESP32 LED Controller (Web Serial)</title>
+  <title>ESP32 LED Controller · Web Serial</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 24px; max-width: 720px; }
-    h1 { margin-top: 0; }
+    :root {
+      --bg: #0b1020;
+      --card: rgba(255,255,255,0.06);
+      --card-border: rgba(255,255,255,0.12);
+      --text: #eaf2ff;
+      --muted: #a8b3c7;
+      --accent: #7cfcff;
+      --accent-2: #8b5cf6;
+      --ok: #34d399;
+      --ev: #60a5fa;
+      --err: #f87171;
+      --shadow: 0 10px 30px rgba(0,0,0,0.35);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(124,252,255,0.15), transparent 50%),
+        radial-gradient(1000px 500px at 110% 10%, rgba(139,92,246,0.18), transparent 50%),
+        linear-gradient(180deg, #0b1020 0%, #0b132b 100%);
+      display: grid;
+      place-items: start center;
+      padding: 28px 16px 40px;
+    }
+    .container { width: 100%; max-width: 980px; }
+    header {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px;
+    }
+    h1 { margin: 0; font-weight: 800; letter-spacing: 0.2px; font-size: 28px; }
+    .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      margin: 14px 0;
+    }
     .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
-    button { padding: 8px 12px; border-radius: 8px; border: 1px solid #ccc; cursor: pointer; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    input[type=range] { width: 240px; }
-    #log { white-space: pre-wrap; height: 220px; overflow: auto; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 10px; }
-    .mode-btn { min-width: 70px; }
-    .ok { color: #0a7; }
-    .ev { color: #06c; }
-    .err { color: #c00; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+    button {
+      appearance: none; border: 0; cursor: pointer; color: var(--text);
+      background: linear-gradient(135deg, rgba(124,252,255,0.2), rgba(139,92,246,0.25));
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 12px; padding: 10px 14px; font-weight: 600; letter-spacing: .2px;
+      transition: transform .12s ease, filter .2s ease, box-shadow .2s ease, background .2s ease;
+      box-shadow: 0 4px 14px rgba(124,252,255,0.15);
+    }
+    button:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    button:active { transform: translateY(0); filter: brightness(0.96); }
+    button:disabled { opacity: .5; cursor: not-allowed; filter: saturate(.7); }
+    .btn-outline { background: transparent; border-color: rgba(255,255,255,0.25); }
+    .chip { font-size: 12px; padding: 6px 10px; border-radius: 999px; color: var(--muted); border: 1px solid rgba(255,255,255,0.15); }
+
+    .modes {
+      display: grid; grid-template-columns: repeat(5, minmax(80px, 1fr)); gap: 10px; margin-top: 6px;
+    }
+    .mode-btn { min-height: 42px; }
+    .mode-btn.active {
+      outline: 2px solid var(--accent);
+      background: linear-gradient(135deg, rgba(124,252,255,0.28), rgba(139,92,246,0.32));
+      box-shadow: 0 6px 16px rgba(124,252,255,0.28);
+    }
+
+    .control { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    .label { font-weight: 600; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    .value { min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; color: var(--accent); }
+    .slider {
+      -webkit-appearance: none; appearance: none; width: 100%; height: 10px; border-radius: 999px;
+      background: linear-gradient(90deg, rgba(124,252,255,0.45), rgba(139,92,246,0.55));
+      outline: none; opacity: 0.95; transition: opacity 0.2s;
+    }
+    .slider:hover { opacity: 1; }
+    .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 3px solid #86e8ff; box-shadow: 0 6px 16px rgba(134,232,255,0.45); cursor: pointer; }
+    .slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 3px solid #86e8ff; box-shadow: 0 6px 16px rgba(134,232,255,0.45); cursor: pointer; }
+
+    #log { white-space: pre-wrap; height: 220px; overflow: auto; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 10px; }
+    .ok { color: var(--ok); }
+    .ev { color: var(--ev); }
+    .err { color: var(--err); }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #f87171; display: inline-block; box-shadow: 0 0 0 2px rgba(248,113,113,0.15); }
+    .status-dot.connected { background: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.15); }
+
+    @media (max-width: 720px) {
+      .modes { grid-template-columns: repeat(3, 1fr); }
+      .grid { grid-template-columns: 1fr; }
+    }
   </style>
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="Control ESP32 LED shows via Web Serial with a clean UI." />
+  <meta http-equiv="origin-trial" content="">
+  <!-- If needed, ensure Web Serial is enabled in Chrome/Edge -->
 </head>
 <body>
-  <h1>ESP32 LED Controller</h1>
+  <div class="container">
+    <header>
+      <div>
+        <h1>ESP32 LED Controller</h1>
+        <div class="subtitle">Web Serial • 10 shows • Speed & Brightness</div>
+      </div>
+      <div class="toolbar">
+        <span class="chip"><span id="dot" class="status-dot"></span> <span id="status">Disconnected</span></span>
+        <button id="btnConnect">Connect</button>
+        <button id="btnDisconnect" class="btn-outline" disabled>Disconnect</button>
+      </div>
+    </header>
 
-  <div class="card">
-    <div class="row">
-      <button id="btnConnect">Connect</button>
-      <span id="status">Disconnected</span>
-    </div>
-  </div>
+    <section class="card">
+      <div class="label">Modes</div>
+      <div class="modes">
+        <button class="mode-btn" data-mode="0">Rainbow</button>
+        <button class="mode-btn" data-mode="1">Theater</button>
+        <button class="mode-btn" data-mode="2">Bounce</button>
+        <button class="mode-btn" data-mode="3">Sparkle</button>
+        <button class="mode-btn" data-mode="4">Wipe</button>
+        <button class="mode-btn" data-mode="5">Twinkle</button>
+        <button class="mode-btn" data-mode="6">Comet</button>
+        <button class="mode-btn" data-mode="7">Fire</button>
+        <button class="mode-btn" data-mode="8">Breathe</button>
+        <button class="mode-btn" data-mode="9">Scanner</button>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnRandom" class="btn-outline">Random Mode</button>
+      </div>
+    </section>
 
-  <div class="card">
-    <h3>Mód</h3>
-    <div class="row">
-      <button class="mode-btn" data-mode="0">Rainbow</button>
-      <button class="mode-btn" data-mode="1">Theater</button>
-      <button class="mode-btn" data-mode="2">Bounce</button>
-      <button class="mode-btn" data-mode="3">Sparkle</button>
-    </div>
-  </div>
+    <section class="grid">
+      <div class="card">
+        <div class="label">Brightness</div>
+        <div class="control">
+          <input id="rangeBri" class="slider" type="range" min="0" max="255" value="40" />
+          <div class="value"><span id="briVal">40</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="label">Speed</div>
+        <div class="control">
+          <input id="rangeSpeed" class="slider" type="range" min="1" max="100" value="50" />
+          <div class="value"><span id="speedVal">50</span>%</div>
+        </div>
+      </div>
+    </section>
 
-  <div class="card">
-    <h3>Jas</h3>
-    <div class="row">
-      <input id="rangeBri" type="range" min="0" max="255" value="40" />
-      <span id="briVal">40</span>
-      <button id="btnSendBri">Send</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>Události & odpovědi</h3>
-    <div id="log"></div>
+    <section class="card">
+      <div class="label">Events & Responses</div>
+      <div id="log"></div>
+    </section>
   </div>
 
 <script>
 (() => {
   const btnConnect = document.getElementById('btnConnect');
+  const btnDisconnect = document.getElementById('btnDisconnect');
   const statusEl   = document.getElementById('status');
+  const dotEl      = document.getElementById('dot');
   const logEl      = document.getElementById('log');
   const rangeBri   = document.getElementById('rangeBri');
   const briVal     = document.getElementById('briVal');
-  const btnSendBri = document.getElementById('btnSendBri');
+  const rangeSpeed = document.getElementById('rangeSpeed');
+  const speedVal   = document.getElementById('speedVal');
   const modeBtns   = [...document.querySelectorAll('.mode-btn')];
+  const btnRandom  = document.getElementById('btnRandom');
 
   let port = null;
   let reader = null;
   let writer = null;
   let connected = false;
+  const totalModes = 10;
+  let currentModeIndex = 0;
 
   function setUI(en) {
     modeBtns.forEach(b => b.disabled = !en);
     rangeBri.disabled = !en;
-    btnSendBri.disabled = !en;
+    rangeSpeed.disabled = !en;
+    btnDisconnect.disabled = !en;
+    btnConnect.disabled = en;
+    dotEl.classList.toggle('connected', en);
+    statusEl.textContent = en ? 'Connected' : 'Disconnected';
   }
   setUI(false);
 
@@ -83,13 +210,19 @@
     logEl.scrollTop = logEl.scrollHeight;
   }
 
+  const debounce = (fn, ms = 200) => {
+    let t = 0;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
+  };
+
   async function connect() {
     try {
       port = await navigator.serial.requestPort();
       await port.open({ baudRate: 115200 });
 
-      const textEncoder = new TextEncoder();
-      const textDecoder = new TextDecoder();
       writer = port.writable.getWriter();
       reader = port.readable
         .pipeThrough(new TextDecoderStream())
@@ -97,15 +230,31 @@
         .getReader();
 
       connected = true;
-      statusEl.textContent = 'Connected';
       setUI(true);
       log('Connected', 'ok');
 
       readLoop().catch(err => {
         log(`Read error: ${err.message}`, 'err');
       });
+
+      // Push initial UI values
+      await sendLine(`BRI ${rangeBri.value}`);
+      await sendLine(`SPEED ${rangeSpeed.value}`);
     } catch (err) {
       log(`Connect error: ${err.message}`, 'err');
+    }
+  }
+
+  async function disconnect() {
+    try {
+      connected = false;
+      if (reader) { try { await reader.cancel(); } catch (_) {} reader.releaseLock(); }
+      if (writer) { try { writer.releaseLock(); } catch (_) {} }
+      if (port)   { try { await port.close(); } catch (_) {} }
+    } finally {
+      port = null; reader = null; writer = null;
+      setUI(false);
+      log('Disconnected');
     }
   }
 
@@ -115,9 +264,40 @@
       if (done) break;
       if (!value) continue;
 
-      // Value = full line (bez \n)
-      if (value.startsWith('OK')) log(value, 'ok');
-      else if (value.startsWith('EV')) log(value, 'ev');
+      if (value.startsWith('OK MODE')) {
+        const num = parseInt(value.split(/\s+/).pop(), 10);
+        setActiveMode(num);
+        log(value, 'ok');
+        continue;
+      }
+      if (value.startsWith('OK BRI')) {
+        const num = parseInt(value.split(/\s+/).pop(), 10);
+        rangeBri.value = String(num);
+        briVal.textContent = String(num);
+        log(value, 'ok');
+        continue;
+      }
+      if (value.startsWith('OK SPEED')) {
+        const num = parseInt(value.split(/\s+/).pop(), 10);
+        rangeSpeed.value = String(num);
+        speedVal.textContent = String(num);
+        log(value, 'ok');
+        continue;
+      }
+
+      if (value === 'EV DOWN') {
+        cycleMode(+1);
+        log(value, 'ev');
+        continue;
+      }
+      if (value === 'EV UP') {
+        cycleMode(-1);
+        log(value, 'ev');
+        continue;
+      }
+
+      if (value.startsWith('EV')) log(value, 'ev');
+      else if (value.startsWith('OK')) log(value, 'ok');
       else log(value);
     }
   }
@@ -128,30 +308,53 @@
     await writer.write(data);
   }
 
+  function setActiveMode(idx) {
+    currentModeIndex = Number(idx) % totalModes;
+    modeBtns.forEach(b => b.classList.toggle('active', Number(b.dataset.mode) === currentModeIndex));
+  }
+
+  async function cycleMode(delta) {
+    const next = (currentModeIndex + delta + totalModes) % totalModes;
+    await sendLine(`MODE ${next}`);
+    setActiveMode(next);
+  }
+
   btnConnect.addEventListener('click', () => {
     if (!('serial' in navigator)) {
-      alert('Váš prohlížeč nepodporuje Web Serial. Použijte Chrome/Edge na desktopu.');
+      alert('Your browser does not support Web Serial. Use Chrome/Edge on desktop.');
       return;
     }
     if (!connected) connect();
   });
+  btnDisconnect.addEventListener('click', () => { if (connected) disconnect(); });
 
   modeBtns.forEach(btn => {
     btn.addEventListener('click', async () => {
       const m = btn.dataset.mode;
       await sendLine(`MODE ${m}`);
+      setActiveMode(Number(m));
     });
   });
 
   rangeBri.addEventListener('input', () => {
     briVal.textContent = rangeBri.value;
+    debouncedSendBri();
+  });
+  const debouncedSendBri = debounce(() => sendLine(`BRI ${rangeBri.value}`), 150);
+
+  rangeSpeed.addEventListener('input', () => {
+    speedVal.textContent = rangeSpeed.value;
+    debouncedSendSpeed();
+  });
+  const debouncedSendSpeed = debounce(() => sendLine(`SPEED ${rangeSpeed.value}`), 150);
+
+  btnRandom.addEventListener('click', async () => {
+    const idx = Math.floor(Math.random() * 10);
+    await sendLine(`MODE ${idx}`);
+    setActiveMode(idx);
   });
 
-  btnSendBri.addEventListener('click', async () => {
-    await sendLine(`BRI ${rangeBri.value}`);
-  });
-
-  // Helper transformer – rozsekat stream na řádky
+  // Helper transformer – split stream to lines
   class LineBreakTransformer {
     constructor() { this.chunks = ''; }
     transform(chunk, controller) {
