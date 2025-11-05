@@ -13,10 +13,10 @@ void loop() {
   int btn = digitalRead(BTN);
 
   if (btn == LOW) {
-    digitalWrite(LED, HIGH);
+    digitalWrite(LED, LOW);
     Serial.println("Button pressed → LED ON");
   } else {
-    digitalWrite(LED, LOW);
+    digitalWrite(LED, HIGH);
     Serial.println("Button released → LED OFF");
   }
 }

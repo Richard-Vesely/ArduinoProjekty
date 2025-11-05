@@ -4,9 +4,9 @@
 // LED3: every 500 ms
 // Total period: 2 seconds
 
-const int LED1 = 2;
+const int LED1 = 4;
 const int LED2 = 3;
-const int LED3 = 4;
+const int LED3 = 2;
 
 void setup() {
   pinMode(LED1, OUTPUT);
@@ -43,26 +43,29 @@ void loop() {
 
   // time = 1000 ms
   digitalWrite(LED1, LOW);   // LED1 completes its 1-second cycle
+    digitalWrite(LED2, LOW);
+
+  digitalWrite(LED3, HIGH);   
+
   delay(200);
 
   // time = 1200 ms
-  digitalWrite(LED2, LOW);
+  digitalWrite(LED2, HIGH);
   delay(200);
 
   // time = 1400 ms
-  digitalWrite(LED2, HIGH);
-  digitalWrite(LED3, HIGH);  // LED3 turns back on (500 ms off)
+  digitalWrite(LED2, LOW);
   delay(100);
 
   // time = 1500 ms
-  digitalWrite(LED2, LOW);
-  delay(200);
+    digitalWrite(LED3, LOW);  // LED3 turns back on (500 ms off)
+  delay(100);
 
-  // time = 1700 ms
+  // time = 1600 ms
   digitalWrite(LED2, HIGH);
   delay(200);
 
-  // time = 1900 ms
-  digitalWrite(LED1, HIGH);  // LED1 turns on again for new cycle
-  delay(100);                // = 2000 ms total
+  // time = 1800 ms
+  digitalWrite(LED2, LOW);
+  delay(200);                // = 2000 ms total
 }
